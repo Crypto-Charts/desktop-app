@@ -18,6 +18,7 @@ import javafx.scene.text.Font
 import javafx.scene.text.Text
 import javafx.stage.Stage
 import java.io.File
+import java.io.IOException
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.net.URL
@@ -29,13 +30,18 @@ import java.util.concurrent.*
 class App : Application() {
     private lateinit var mapper: ObjectMapper
     private lateinit var executor: ScheduledExecutorService
-    private lateinit var setup: Setup
+    private var setup: Setup? = null
+    private var suppressed: Exception? = null
     private lateinit var fetcher: Future<Fetcher.Result>
 
     override fun init() {
         mapper = ObjectMapper().registerModule(KotlinModule())
         executor = Executors.newScheduledThreadPool(2)
-        setup = loadSetup()
+        try {
+            setup = loadSetup()
+        } catch (e: IOException) {
+            suppressed = e
+        }
         refresh()
     }
 
@@ -50,7 +56,7 @@ class App : Application() {
     }
 
     private fun refresh() {
-        fetcher = executor.submit(Fetcher(setup, mapper))
+        fetcher = executor.submit(Fetcher(suppressed, setup, mapper))
     }
 
     override fun start(primaryStage: Stage) {
@@ -116,10 +122,12 @@ fun ExecutionException.printStackTraceString(): String {
     return writer.toString()
 }
 
-class Fetcher(private val setup: Setup, private val mapper: ObjectMapper) : Callable<Fetcher.Result> {
+class Fetcher(private val suppressed: Exception?, private val setup: Setup?, private val mapper: ObjectMapper) : Callable<Fetcher.Result> {
     override fun call(): Result {
+        if (suppressed != null) throw suppressed
+
         val currencies: MutableList<Currency> = mutableListOf()
-        for (currencyOwned in setup.currenciesOwned) {
+        for (currencyOwned in setup!!.currenciesOwned) {
             val tree = fetch(currencyOwned.id, setup.localCurrency.id.toUpperCase())
             val currency: Currency = mapper.treeToValue(tree)
             val price = tree["price_${setup.localCurrency.id.toLowerCase()}"].asDouble()
