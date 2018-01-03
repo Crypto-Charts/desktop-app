@@ -1,0 +1,196 @@
+package it.menzani.cryptocharts
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.fasterxml.jackson.module.kotlin.readValue
+import com.fasterxml.jackson.module.kotlin.treeToValue
+import javafx.application.Application
+import javafx.geometry.Insets
+import javafx.scene.Scene
+import javafx.scene.image.Image
+import javafx.scene.layout.StackPane
+import javafx.scene.paint.Color
+import javafx.scene.text.Font
+import javafx.scene.text.Text
+import javafx.stage.Stage
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.net.URL
+import java.text.DecimalFormat
+import java.text.NumberFormat
+import java.util.*
+import java.util.concurrent.*
+
+class App : Application() {
+    lateinit var executor: ExecutorService
+    lateinit var fetcher: Future<Fetcher.Result>
+
+    override fun init() {
+        executor = Executors.newSingleThreadExecutor()
+        fetcher = executor.submit(Fetcher())
+    }
+
+    override fun start(primaryStage: Stage) {
+        primaryStage.icons.add(Image(this::class.java.getResourceAsStream("icon.png")))
+        primaryStage.title = "Crypto Charts"
+        primaryStage.scene = createScene()
+        primaryStage.show()
+    }
+
+    private fun createScene(): Scene {
+        val pane = StackPane(createText())
+        pane.padding = Insets(10.0)
+        return Scene(pane)
+    }
+
+    private fun createText(): Text {
+        val fetcherResult: Fetcher.Result
+        try {
+            fetcherResult = fetcher.get()
+        } catch (e: ExecutionException) {
+            e.printStackTrace()
+            val text = Text(e.printStackTraceString())
+            text.fill = Color.RED
+            return text
+        } finally {
+            executor.shutdown()
+        }
+
+        val textContent = StringBuilder()
+        var totalNetWorth = 0.0
+        for (currency in fetcherResult.currencies) {
+            textContent.append(currency.toString(fetcherResult.localCurrency))
+            textContent.append(System.lineSeparator())
+            totalNetWorth += currency.netWorth
+        }
+        textContent.append("Total Net Worth: ")
+        val totalNetWorthText = PriceFormatter.format(totalNetWorth)
+        textContent.append(fetcherResult.localCurrency.writePriceString(totalNetWorthText))
+
+        val text = Text(textContent.toString())
+        text.font = Font.loadFont(this::class.java.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), 16.0)
+        return text
+    }
+
+    companion object {
+        @JvmStatic
+        fun main(args: Array<String>) {
+            Application.launch(App::class.java)
+        }
+    }
+}
+
+fun ExecutionException.printStackTraceString(): String {
+    val writer = StringWriter()
+    writer.use { this.cause!!.printStackTrace(PrintWriter(it)) }
+    return writer.toString()
+}
+
+class Fetcher : Callable<Fetcher.Result> {
+    private lateinit var mapper: ObjectMapper
+
+    override fun call(): Result {
+        mapper = ObjectMapper().registerModule(KotlinModule())
+
+        val setup: Setup = loadSetup()
+        val currencies: MutableList<Currency> = mutableListOf()
+        for (currencyOwned in setup.currenciesOwned) {
+            val tree = fetch(currencyOwned.id, setup.localCurrency.id.toUpperCase())
+            val currency: Currency = mapper.treeToValue(tree)
+            val price = tree["price_${setup.localCurrency.id.toLowerCase()}"].asDouble()
+            currency.netWorth = currencyOwned.amount * price
+            currencies.add(currency)
+        }
+        return Result(currencies, setup.localCurrency)
+    }
+
+    private fun loadSetup(): Setup {
+        val external = File("setup.json")
+        val internal = this::class.java.getResource(external.name)
+
+        if (internal == null) {
+            return mapper.readValue(external)
+        }
+        return mapper.readValue(internal)
+    }
+
+    private fun fetch(currencyId: String, localCurrencyId: String): JsonNode {
+        val response: JsonNode = mapper.readTree(URL(
+                "https://api.coinmarketcap.com/v1/ticker/$currencyId/?convert=$localCurrencyId"))
+        if (response.isArray && response.size() == 1) {
+            return response[0]
+        }
+        throw Exception("Unexpected response: $response")
+    }
+
+    class Result(val currencies: List<Currency>, val localCurrency: LocalCurrency)
+}
+
+data class Setup(
+        val localCurrency: LocalCurrency,
+        val currenciesOwned: Array<CurrencyOwned>
+)
+
+data class LocalCurrency(
+        val id: String,
+        val symbol: String,
+        val symbolPosition: SymbolPosition
+) {
+    fun writePriceString(price: String): String {
+        var result = if (symbolPosition == SymbolPosition.LEFT) symbol else ""
+        result += price
+        if (symbolPosition == SymbolPosition.RIGHT) result += symbol
+        return result
+    }
+}
+
+enum class SymbolPosition {
+    LEFT, RIGHT
+}
+
+data class CurrencyOwned(
+        val id: String,
+        val amount: Double
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class Currency(
+        val id: String,
+        val name: String,
+        val symbol: String,
+        val rank: String,
+        val price_usd: String,
+        val price_btc: String,
+        @JsonProperty("24h_volume_usd") val volume_usd: String,
+        val market_cap_usd: String,
+        val available_supply: String,
+        val total_supply: String,
+        val max_supply: String?,
+        val percent_change_1h: String,
+        val percent_change_24h: String,
+        val percent_change_7d: String,
+        val last_updated: String
+) {
+    var netWorth = 0.0
+
+    fun toString(localCurrency: LocalCurrency): String {
+        val price_usd = PriceFormatter.format(price_usd.toDouble())
+        val netWorth = PriceFormatter.format(netWorth)
+        return "$symbol/USD: $$price_usd – $symbol Net Worth: ${localCurrency.writePriceString(netWorth)}"
+    }
+}
+
+object PriceFormatter {
+    private val FORMATTER: NumberFormat = DecimalFormat.getNumberInstance(Locale.US)
+
+    init {
+        FORMATTER.maximumFractionDigits = 2
+        FORMATTER.minimumFractionDigits = 2
+    }
+
+    fun format(price: Double): String = FORMATTER.format(price)
+}
