@@ -5,6 +5,7 @@
     <content url="file://$MODULE_DIR$">
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" packagePrefix="it.menzani.cryptocharts" />
       <sourceFolder url="file://$MODULE_DIR$/res" type="java-resource" relativeOutputPath="it.menzani.cryptocharts" />
+      <excludeFolder url="file://$MODULE_DIR$/runtime" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

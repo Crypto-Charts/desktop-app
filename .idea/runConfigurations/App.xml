@@ -2,7 +2,7 @@
   <configuration default="false" name="App" type="JetRunConfigurationType" factoryName="Kotlin">
     <option name="MAIN_CLASS_NAME" value="it.menzani.cryptocharts.App" />
     <option name="VM_PARAMETERS" value="" />
-    <option name="PROGRAM_PARAMETERS" value="" />
+    <option name="PROGRAM_PARAMETERS" value="runtime/setup.json" />
     <option name="WORKING_DIRECTORY" value="" />
     <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
     <option name="ALTERNATIVE_JRE_PATH" />

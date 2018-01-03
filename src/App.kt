@@ -11,6 +11,7 @@ import javafx.application.Application
 import javafx.geometry.Insets
 import javafx.scene.Scene
 import javafx.scene.image.Image
+import javafx.scene.layout.Pane
 import javafx.scene.layout.StackPane
 import javafx.scene.paint.Color
 import javafx.scene.text.Font
@@ -26,25 +27,48 @@ import java.util.*
 import java.util.concurrent.*
 
 class App : Application() {
-    lateinit var executor: ExecutorService
-    lateinit var fetcher: Future<Fetcher.Result>
+    private lateinit var mapper: ObjectMapper
+    private lateinit var executor: ScheduledExecutorService
+    private lateinit var setup: Setup
+    private lateinit var fetcher: Future<Fetcher.Result>
 
     override fun init() {
-        executor = Executors.newSingleThreadExecutor()
-        fetcher = executor.submit(Fetcher())
+        mapper = ObjectMapper().registerModule(KotlinModule())
+        executor = Executors.newScheduledThreadPool(2)
+        setup = loadSetup()
+        refresh()
+    }
+
+    private fun loadSetup(): Setup {
+        val external = File(if (parameters.unnamed.isEmpty()) "setup.json" else parameters.unnamed[0])
+        val internal = this::class.java.getResource(external.name)
+
+        if (internal == null) {
+            return mapper.readValue(external)
+        }
+        return mapper.readValue(internal)
+    }
+
+    private fun refresh() {
+        fetcher = executor.submit(Fetcher(setup, mapper))
     }
 
     override fun start(primaryStage: Stage) {
         primaryStage.icons.add(Image(this::class.java.getResourceAsStream("icon.png")))
         primaryStage.title = "Crypto Charts"
-        primaryStage.scene = createScene()
+        primaryStage.scene = Scene(createPane())
         primaryStage.show()
+
+        executor.scheduleWithFixedDelay({
+            refresh()
+            primaryStage.scene.root = createPane()
+        }, 10, 10, TimeUnit.MINUTES)
     }
 
-    private fun createScene(): Scene {
+    private fun createPane(): Pane {
         val pane = StackPane(createText())
         pane.padding = Insets(10.0)
-        return Scene(pane)
+        return pane
     }
 
     private fun createText(): Text {
@@ -56,8 +80,6 @@ class App : Application() {
             val text = Text(e.printStackTraceString())
             text.fill = Color.RED
             return text
-        } finally {
-            executor.shutdown()
         }
 
         val textContent = StringBuilder()
@@ -76,10 +98,14 @@ class App : Application() {
         return text
     }
 
+    override fun stop() {
+        executor.shutdown()
+    }
+
     companion object {
         @JvmStatic
         fun main(args: Array<String>) {
-            Application.launch(App::class.java)
+            Application.launch(App::class.java, *args)
         }
     }
 }
@@ -90,13 +116,8 @@ fun ExecutionException.printStackTraceString(): String {
     return writer.toString()
 }
 
-class Fetcher : Callable<Fetcher.Result> {
-    private lateinit var mapper: ObjectMapper
-
+class Fetcher(private val setup: Setup, private val mapper: ObjectMapper) : Callable<Fetcher.Result> {
     override fun call(): Result {
-        mapper = ObjectMapper().registerModule(KotlinModule())
-
-        val setup: Setup = loadSetup()
         val currencies: MutableList<Currency> = mutableListOf()
         for (currencyOwned in setup.currenciesOwned) {
             val tree = fetch(currencyOwned.id, setup.localCurrency.id.toUpperCase())
@@ -106,16 +127,6 @@ class Fetcher : Callable<Fetcher.Result> {
             currencies.add(currency)
         }
         return Result(currencies, setup.localCurrency)
-    }
-
-    private fun loadSetup(): Setup {
-        val external = File("setup.json")
-        val internal = this::class.java.getResource(external.name)
-
-        if (internal == null) {
-            return mapper.readValue(external)
-        }
-        return mapper.readValue(internal)
     }
 
     private fun fetch(currencyId: String, localCurrencyId: String): JsonNode {
@@ -141,15 +152,15 @@ data class LocalCurrency(
         val symbolPosition: SymbolPosition
 ) {
     fun writePriceString(price: String): String {
-        var result = if (symbolPosition == SymbolPosition.LEFT) symbol else ""
+        var result = if (symbolPosition == SymbolPosition.BEFORE) symbol else ""
         result += price
-        if (symbolPosition == SymbolPosition.RIGHT) result += symbol
+        if (symbolPosition == SymbolPosition.AFTER) result += symbol
         return result
     }
 }
 
 enum class SymbolPosition {
-    LEFT, RIGHT
+    BEFORE, AFTER
 }
 
 data class CurrencyOwned(
