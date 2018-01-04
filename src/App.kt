@@ -7,7 +7,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.treeToValue
+import javafx.animation.KeyFrame
+import javafx.animation.Timeline
 import javafx.application.Application
+import javafx.application.Platform
+import javafx.event.EventHandler
 import javafx.geometry.Insets
 import javafx.scene.Scene
 import javafx.scene.image.Image
@@ -17,6 +21,7 @@ import javafx.scene.paint.Color
 import javafx.scene.text.Font
 import javafx.scene.text.Text
 import javafx.stage.Stage
+import javafx.util.Duration
 import java.io.File
 import java.io.IOException
 import java.io.PrintWriter
@@ -29,14 +34,14 @@ import java.util.concurrent.*
 
 class App : Application() {
     private lateinit var mapper: ObjectMapper
-    private lateinit var executor: ScheduledExecutorService
+    private lateinit var executor: ExecutorService
     private var setup: Setup? = null
     private var suppressed: Exception? = null
     private lateinit var fetcher: Future<Fetcher.Result>
 
     override fun init() {
         mapper = ObjectMapper().registerModule(KotlinModule())
-        executor = Executors.newScheduledThreadPool(2)
+        executor = Executors.newSingleThreadExecutor()
         try {
             setup = loadSetup()
         } catch (e: IOException) {
@@ -55,6 +60,7 @@ class App : Application() {
         return mapper.readValue(internal)
     }
 
+    @Synchronized
     private fun refresh() {
         fetcher = executor.submit(Fetcher(suppressed, setup, mapper))
     }
@@ -62,13 +68,17 @@ class App : Application() {
     override fun start(primaryStage: Stage) {
         primaryStage.icons.add(Image(this::class.java.getResourceAsStream("icon.png")))
         primaryStage.title = "Crypto Charts"
-        primaryStage.scene = Scene(createPane())
-        primaryStage.show()
 
-        executor.scheduleWithFixedDelay({
+        schedule(Duration.minutes(10.0)) {
             refresh()
-            primaryStage.scene.root = createPane()
-        }, 10, 10, TimeUnit.MINUTES)
+            if (primaryStage.scene == null) {
+                primaryStage.scene = Scene(createPane())
+                primaryStage.show()
+            } else {
+                primaryStage.scene.root = createPane()
+            }
+            primaryStage.sizeToScene()
+        }
     }
 
     private fun createPane(): Pane {
@@ -80,7 +90,9 @@ class App : Application() {
     private fun createText(): Text {
         val fetcherResult: Fetcher.Result
         try {
-            fetcherResult = fetcher.get()
+            fetcherResult = synchronized(this) {
+                return@synchronized fetcher.get()
+            }
         } catch (e: ExecutionException) {
             e.printStackTrace()
             val text = Text(e.printStackTraceString())
@@ -104,6 +116,13 @@ class App : Application() {
         return text
     }
 
+    private fun schedule(interval: Duration, action: () -> Unit) {
+        Platform.runLater(action)
+        val animation = Timeline(KeyFrame(interval, EventHandler { action() }))
+        animation.cycleCount = Timeline.INDEFINITE
+        animation.play()
+    }
+
     override fun stop() {
         executor.shutdown()
     }
@@ -116,7 +135,7 @@ class App : Application() {
     }
 }
 
-fun ExecutionException.printStackTraceString(): String {
+private fun ExecutionException.printStackTraceString(): String {
     val writer = StringWriter()
     writer.use { this.cause!!.printStackTrace(PrintWriter(it)) }
     return writer.toString()
