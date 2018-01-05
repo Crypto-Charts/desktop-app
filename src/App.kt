@@ -11,6 +11,7 @@ import javafx.animation.KeyFrame
 import javafx.animation.Timeline
 import javafx.application.Application
 import javafx.application.Platform
+import javafx.beans.value.ChangeListener
 import javafx.event.EventHandler
 import javafx.geometry.Insets
 import javafx.scene.Scene
@@ -79,6 +80,10 @@ class App : Application() {
             }
             primaryStage.sizeToScene()
         }
+        primaryStage.iconifiedProperty().addListener(ChangeListener { _, _, newValue ->
+            if (newValue) return@ChangeListener
+            primaryStage.scene.root = createPane()
+        })
     }
 
     private fun createPane(): Pane {
