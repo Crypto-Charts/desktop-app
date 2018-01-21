@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.treeToValue
 import javafx.animation.KeyFrame
@@ -23,6 +23,10 @@ import javafx.scene.text.Font
 import javafx.scene.text.Text
 import javafx.stage.Stage
 import javafx.util.Duration
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Network
+import org.stellar.sdk.Server
+import org.stellar.sdk.responses.AccountResponse
 import java.io.File
 import java.io.IOException
 import java.io.PrintWriter
@@ -41,7 +45,7 @@ class App : Application() {
     private lateinit var fetcher: Future<Fetcher.Result>
 
     override fun init() {
-        mapper = ObjectMapper().registerModule(KotlinModule())
+        mapper = jacksonObjectMapper()
         executor = Executors.newSingleThreadExecutor()
         try {
             setup = loadSetup()
@@ -154,8 +158,16 @@ class Fetcher(private val suppressed: Exception?, private val setup: Setup?, pri
         for (currencyOwned in setup!!.currenciesOwned) {
             val tree = fetch(currencyOwned.id, setup.localCurrency.id.toUpperCase())
             val currency: Currency = mapper.treeToValue(tree)
+            val amount = if (currencyOwned.id == "stellar" && currencyOwned.stellarAccountId != null) {
+                Arrays.stream(currencyOwned.stellarAccount().balances)
+                        .filter { it.assetType == "native" }
+                        .findFirst().get()
+                        .balance.toDouble()
+            } else {
+                currencyOwned.amount
+            }
             val price = tree["price_${setup.localCurrency.id.toLowerCase()}"].asDouble()
-            currency.netWorth = currencyOwned.amount * price
+            currency.netWorth = amount * price
             currencies.add(currency)
         }
         return Result(currencies, setup.localCurrency)
@@ -197,8 +209,16 @@ enum class SymbolPosition {
 
 data class CurrencyOwned(
         val id: String,
-        val amount: Double
-)
+        val amount: Double,
+        val stellarAccountId: String?
+) {
+    private val horizon by lazy {
+        Network.usePublicNetwork()
+        Server("https://horizon.stellar.org")
+    }
+
+    fun stellarAccount(): AccountResponse = horizon.accounts().account(KeyPair.fromAccountId(stellarAccountId!!))
+}
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class Currency(
