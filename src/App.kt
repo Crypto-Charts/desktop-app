@@ -243,7 +243,7 @@ data class Currency(
     fun toString(localCurrency: LocalCurrency): String {
         val price_usd = PriceFormatter.format(price_usd.toDouble())
         val netWorth = PriceFormatter.format(netWorth)
-        return "$symbol/USD: $$price_usd – $symbol Net Worth: ${localCurrency.writePriceString(netWorth)}"
+        return "$symbol/USD: $$price_usd — $symbol Net Worth: ${localCurrency.writePriceString(netWorth)}"
     }
 }
 
