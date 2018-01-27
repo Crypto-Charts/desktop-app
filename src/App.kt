@@ -250,10 +250,18 @@ data class Currency(
 object PriceFormatter {
     private val FORMATTER: NumberFormat = DecimalFormat.getNumberInstance(Locale.US)
 
-    init {
-        FORMATTER.maximumFractionDigits = 2
-        FORMATTER.minimumFractionDigits = 2
+    fun format(price: Double): String {
+        val digits = when {
+            price < 0.0001 -> 6
+            price < 0.001 -> 5
+            price < 0.01 -> 4
+            price < 0.1 -> 3
+            price < 10 -> 2
+            price < 100 -> 1
+            else -> 0
+        }
+        FORMATTER.minimumFractionDigits = digits
+        FORMATTER.maximumFractionDigits = digits
+        return FORMATTER.format(price)
     }
-
-    fun format(price: Double): String = FORMATTER.format(price)
 }
