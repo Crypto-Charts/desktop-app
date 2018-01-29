@@ -111,14 +111,14 @@ class App : Application() {
 
         val textContent = StringBuilder()
         var totalNetWorth = 0.0
+        val localCurrencyFormatter = fetcherResult.localCurrency.formatter
         for (currency in fetcherResult.currencies) {
-            textContent.append(currency.toString(fetcherResult.localCurrency))
+            textContent.append(currency.toString(localCurrencyFormatter))
             textContent.append(System.lineSeparator())
             totalNetWorth += currency.netWorth
         }
         textContent.append("Total Net Worth: ")
-        val totalNetWorthText = PriceFormatter.format(totalNetWorth)
-        textContent.append(fetcherResult.localCurrency.writePriceString(totalNetWorthText))
+        textContent.append(localCurrencyFormatter.format(totalNetWorth))
 
         val text = Text(textContent.toString())
         text.font = Font.loadFont(this::class.java.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), 16.0)
@@ -192,19 +192,9 @@ data class Setup(
 
 data class LocalCurrency(
         val id: String,
-        val symbol: String,
-        val symbolPosition: SymbolPosition
+        val languageTag: String
 ) {
-    fun writePriceString(price: String): String {
-        var result = if (symbolPosition == SymbolPosition.BEFORE) symbol else ""
-        result += price
-        if (symbolPosition == SymbolPosition.AFTER) result += symbol
-        return result
-    }
-}
-
-enum class SymbolPosition {
-    BEFORE, AFTER
+    val formatter = CurrencyFormatter(Locale.forLanguageTag(languageTag))
 }
 
 data class CurrencyOwned(
@@ -238,17 +228,18 @@ data class Currency(
         val percent_change_7d: String,
         val last_updated: String
 ) {
+    private val priceFormatter = CurrencyFormatter(Locale.US)
     var netWorth = 0.0
 
-    fun toString(localCurrency: LocalCurrency): String {
-        val price_usd = PriceFormatter.format(price_usd.toDouble())
-        val netWorth = PriceFormatter.format(netWorth)
-        return "$symbol/USD: $$price_usd — $symbol Net Worth: ${localCurrency.writePriceString(netWorth)}"
+    fun toString(formatter: CurrencyFormatter): String {
+        val price_usd = priceFormatter.format(price_usd.toDouble())
+        val netWorth = formatter.format(netWorth)
+        return "$symbol/USD: $price_usd — $symbol Net Worth: $netWorth"
     }
 }
 
-object PriceFormatter {
-    private val FORMATTER: NumberFormat = DecimalFormat.getNumberInstance(Locale.US)
+class CurrencyFormatter(locale: Locale) {
+    private val formatter: NumberFormat = DecimalFormat.getCurrencyInstance(locale)
 
     fun format(price: Double): String {
         val digits = when {
@@ -260,8 +251,8 @@ object PriceFormatter {
             price < 100 -> 1
             else -> 0
         }
-        FORMATTER.minimumFractionDigits = digits
-        FORMATTER.maximumFractionDigits = digits
-        return FORMATTER.format(price)
+        formatter.minimumFractionDigits = digits
+        formatter.maximumFractionDigits = digits
+        return formatter.format(price)
     }
 }
