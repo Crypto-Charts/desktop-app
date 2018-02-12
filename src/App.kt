@@ -1,7 +1,6 @@
 package it.menzani.cryptocharts
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -212,21 +211,8 @@ data class CurrencyOwned(
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class Currency(
-        val id: String,
-        val name: String,
         val symbol: String,
-        val rank: String,
-        val price_usd: String,
-        val price_btc: String,
-        @JsonProperty("24h_volume_usd") val volume_usd: String,
-        val market_cap_usd: String,
-        val available_supply: String,
-        val total_supply: String,
-        val max_supply: String?,
-        val percent_change_1h: String,
-        val percent_change_24h: String,
-        val percent_change_7d: String,
-        val last_updated: String
+        val price_usd: String
 ) {
     private val priceFormatter = CurrencyFormatter(Locale.US)
     var netWorth = 0.0
