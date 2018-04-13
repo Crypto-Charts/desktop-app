@@ -44,6 +44,7 @@ class App : Application() {
     private var setup: Setup? = null
     private var suppressed: Exception? = null
     private lateinit var fetcher: Future<Fetcher.Result>
+    private lateinit var mediaPlayer: MediaPlayer
 
     override fun init() {
         mapper = jacksonObjectMapper()
@@ -61,7 +62,7 @@ class App : Application() {
         val song = this.javaClass.getResource("song.mp3") ?: return
         val media = Media(song.toExternalForm())
         media.setOnError { media.error.printStackTrace() }
-        val mediaPlayer = MediaPlayer(media)
+        mediaPlayer = MediaPlayer(media)
         mediaPlayer.setOnError { mediaPlayer.error.printStackTrace() }
         mediaPlayer.play()
     }
