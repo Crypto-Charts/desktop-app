@@ -64,7 +64,7 @@ class App : Application() {
     }
 
     private fun loadSetup(): Setup {
-        val external = File(if (parameters.unnamed.isEmpty()) "setup.json" else parameters.unnamed[0])
+        val external = File(parameters.named.getOrDefault("setup-file", "setup.json"))
         val internal = this::class.java.getResource(external.name)
 
         if (internal == null) {
