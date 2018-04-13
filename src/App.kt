@@ -17,6 +17,8 @@ import javafx.scene.Scene
 import javafx.scene.image.Image
 import javafx.scene.layout.Pane
 import javafx.scene.layout.StackPane
+import javafx.scene.media.Media
+import javafx.scene.media.MediaPlayer
 import javafx.scene.paint.Color
 import javafx.scene.text.Font
 import javafx.scene.text.Text
@@ -52,6 +54,13 @@ class App : Application() {
             suppressed = e
         }
         refresh()
+        playSong()
+    }
+
+    private fun playSong() {
+        val song = this::class.java.getResource("song.mp3") ?: return
+        val media = Media(song.toExternalForm())
+        MediaPlayer(media).play()
     }
 
     private fun loadSetup(): Setup {
