@@ -60,7 +60,10 @@ class App : Application() {
     private fun playSong() {
         val song = this.javaClass.getResource("song.mp3") ?: return
         val media = Media(song.toExternalForm())
-        MediaPlayer(media).play()
+        media.setOnError { media.error.printStackTrace() }
+        val mediaPlayer = MediaPlayer(media)
+        mediaPlayer.setOnError { mediaPlayer.error.printStackTrace() }
+        mediaPlayer.play()
     }
 
     private fun loadSetup(): Setup {
