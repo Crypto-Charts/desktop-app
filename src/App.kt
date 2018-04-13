@@ -74,11 +74,11 @@ class App : Application() {
         primaryStage.title = "Crypto Charts"
 
         schedule(Duration.minutes(10.0)) {
-            refresh()
             if (primaryStage.scene == null) {
                 primaryStage.scene = Scene(createPane())
                 primaryStage.show()
             } else {
+                refresh()
                 primaryStage.scene.root = createPane()
             }
             primaryStage.sizeToScene()
