@@ -58,14 +58,14 @@ class App : Application() {
     }
 
     private fun playSong() {
-        val song = this::class.java.getResource("song.mp3") ?: return
+        val song = this.javaClass.getResource("song.mp3") ?: return
         val media = Media(song.toExternalForm())
         MediaPlayer(media).play()
     }
 
     private fun loadSetup(): Setup {
         val external = File(parameters.named.getOrDefault("setup-file", "setup.json"))
-        val internal = this::class.java.getResource(external.name)
+        val internal = this.javaClass.getResource(external.name)
 
         if (internal == null) {
             return mapper.readValue(external)
@@ -79,7 +79,7 @@ class App : Application() {
     }
 
     override fun start(primaryStage: Stage) {
-        primaryStage.icons.add(Image(this::class.java.getResourceAsStream("icon.png")))
+        primaryStage.icons.add(Image(this.javaClass.getResourceAsStream("icon.png")))
         primaryStage.title = "Crypto Charts"
 
         schedule(Duration.minutes(10.0)) {
@@ -129,7 +129,7 @@ class App : Application() {
         textContent.append(localCurrencyFormatter.format(totalNetWorth))
 
         val text = Text(textContent.toString())
-        text.font = Font.loadFont(this::class.java.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), 16.0)
+        text.font = Font.loadFont(this.javaClass.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), 16.0)
         return text
     }
 
