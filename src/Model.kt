@@ -1,13 +1,18 @@
 package it.menzani.cryptocharts
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.treeToValue
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 import org.stellar.sdk.Server
 import org.stellar.sdk.responses.AccountResponse
+import java.net.URL
 import java.text.DecimalFormat
 import java.text.NumberFormat
 import java.util.*
+import java.util.concurrent.Callable
 
 data class Setup(
         val localCurrency: LocalCurrency,
@@ -66,4 +71,39 @@ class CurrencyFormatter(locale: Locale) {
         formatter.maximumFractionDigits = digits
         return formatter.format(price)
     }
+}
+
+class Fetcher(private val suppressed: Exception?, private val setup: Setup?, private val mapper: ObjectMapper) : Callable<Fetcher.Result> {
+    override fun call(): Result {
+        if (suppressed != null) throw suppressed
+
+        val currencies: MutableList<Currency> = mutableListOf()
+        for (currencyOwned in setup!!.currenciesOwned) {
+            val tree = fetch(currencyOwned.id, setup.localCurrency.id.toUpperCase())
+            val currency: Currency = mapper.treeToValue(tree)
+            val amount = if (currencyOwned.id == "stellar" && currencyOwned.stellarAccountId != null) {
+                Arrays.stream(currencyOwned.stellarAccount().balances)
+                        .filter { it.assetType == "native" }
+                        .findFirst().get()
+                        .balance.toDouble()
+            } else {
+                currencyOwned.amount
+            }
+            val price = tree["price_${setup.localCurrency.id.toLowerCase()}"].asDouble()
+            currency.netWorth = amount * price
+            currencies.add(currency)
+        }
+        return Result(currencies, setup.localCurrency)
+    }
+
+    private fun fetch(currencyId: String, localCurrencyId: String): JsonNode {
+        val response: JsonNode = mapper.readTree(URL(
+                "https://api.coinmarketcap.com/v1/ticker/$currencyId/?convert=$localCurrencyId"))
+        if (response.isArray && response.size() == 1) {
+            return response[0]
+        }
+        throw Exception("Unexpected response: $response")
+    }
+
+    class Result(val currencies: List<Currency>, val localCurrency: LocalCurrency)
 }
