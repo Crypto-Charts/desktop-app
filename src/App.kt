@@ -9,11 +9,20 @@ import javafx.animation.KeyFrame
 import javafx.animation.Timeline
 import javafx.application.Application
 import javafx.application.Platform
+import javafx.beans.binding.Bindings
+import javafx.beans.binding.DoubleBinding
+import javafx.beans.property.DoubleProperty
+import javafx.beans.property.SimpleDoubleProperty
 import javafx.beans.value.ChangeListener
+import javafx.beans.value.ObservableValue
 import javafx.event.EventHandler
 import javafx.geometry.Insets
 import javafx.scene.Scene
 import javafx.scene.image.Image
+import javafx.scene.input.KeyCode
+import javafx.scene.input.KeyCodeCombination
+import javafx.scene.input.KeyCombination
+import javafx.scene.input.KeyEvent
 import javafx.scene.layout.Pane
 import javafx.scene.layout.StackPane
 import javafx.scene.media.Media
@@ -38,6 +47,7 @@ class App : Application() {
     private var suppressed: Exception? = null
     private lateinit var fetcher: Future<Fetcher.Result>
     private lateinit var mediaPlayer: MediaPlayer // Do not inline: https://stackoverflow.com/a/47837424/3453226
+    private lateinit var presentation: Presentation
 
     override fun init() {
         mapper = jacksonObjectMapper()
@@ -74,11 +84,15 @@ class App : Application() {
     override fun start(primaryStage: Stage) {
         primaryStage.icons.add(Image(javaClass.getResourceAsStream("icon.png")))
         primaryStage.title = "Crypto Charts"
+        primaryStage.isResizable = false
+        primaryStage.fullScreenExitHint = ""
+        presentation = Presentation(primaryStage)
 
         schedule(Duration.minutes(10.0)) {
             if (primaryStage.scene == null) {
                 primaryStage.scene = Scene(createPane())
                 primaryStage.show()
+                presentation.registerEvents()
             } else {
                 refresh()
                 primaryStage.scene.root = createPane()
@@ -122,12 +136,42 @@ class App : Application() {
         textContent.append(localCurrencyFormatter.format(totalNetWorth))
 
         val text = Text(textContent.toString())
-        text.font = Font.loadFont(javaClass.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), 16.0)
+        text.font = Font.loadFont(javaClass.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), presentation.defaultFontSize)
+        text.styleProperty().bind(Bindings.concat("-fx-font-size: ", presentation.fontSizeProperty.asString(), "px;")) // https://stackoverflow.com/a/23832850/3453226
         return text
     }
 
     override fun stop() {
         executor.shutdown()
+    }
+
+    private class Presentation(private val stage: Stage) : ChangeListener<Boolean>, EventHandler<KeyEvent> {
+        private lateinit var scalingFontSize: DoubleBinding
+        private val shortcut: KeyCombination = KeyCodeCombination(KeyCode.F11)
+        val defaultFontSize = 16.0
+        val fontSizeProperty: DoubleProperty = SimpleDoubleProperty(defaultFontSize)
+
+        fun registerEvents() {
+            val scene = stage.scene
+            scalingFontSize = scene.widthProperty().add(scene.heightProperty()).divide(30)
+            stage.fullScreenProperty().addListener(this)
+            scene.addEventFilter(KeyEvent.KEY_PRESSED, this)
+        }
+
+        override fun changed(observable: ObservableValue<out Boolean>, oldValue: Boolean, newValue: Boolean) {
+            if (newValue) {
+                fontSizeProperty.bind(scalingFontSize)
+            } else {
+                fontSizeProperty.unbind()
+                fontSizeProperty.set(defaultFontSize)
+            }
+        }
+
+        override fun handle(event: KeyEvent) {
+            if (!shortcut.match(event)) return
+            event.consume()
+            stage.isFullScreen = true
+        }
     }
 
     companion object {
