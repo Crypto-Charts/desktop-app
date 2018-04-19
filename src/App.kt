@@ -82,7 +82,7 @@ class App : Application() {
     }
 
     override fun start(primaryStage: Stage) {
-        primaryStage.icons.add(Image(javaClass.getResourceAsStream("icon.png")))
+        javaClass.getResourceAsStream("icon.png").use { primaryStage.icons.add(Image(it)) }
         primaryStage.title = "Crypto Charts"
         primaryStage.isResizable = false
         primaryStage.fullScreenExitHint = ""
@@ -99,10 +99,9 @@ class App : Application() {
             }
             primaryStage.sizeToScene()
         }
-        primaryStage.iconifiedProperty().addListener(ChangeListener { _, _, newValue ->
-            if (newValue) return@ChangeListener
-            primaryStage.scene.root = createPane()
-        })
+        primaryStage.iconifiedProperty().addListener { _, oldValue, _ ->
+            if (oldValue) primaryStage.scene.root = createPane()
+        }
     }
 
     private fun createPane(): Pane {
@@ -112,11 +111,8 @@ class App : Application() {
     }
 
     private fun createText(): Text {
-        val fetcherResult: Fetcher.Result
-        try {
-            fetcherResult = synchronized(this) {
-                return@synchronized fetcher.get()
-            }
+        val fetcherResult = try {
+            synchronized(this) { fetcher.get() }
         } catch (e: ExecutionException) {
             e.printStackTrace()
             val text = Text(e.printStackTraceString())
@@ -136,7 +132,7 @@ class App : Application() {
         textContent.append(localCurrencyFormatter.format(totalNetWorth))
 
         val text = Text(textContent.toString())
-        text.font = Font.loadFont(javaClass.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf"), presentation.defaultFontSize)
+        javaClass.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf").use { text.font = Font.loadFont(it, presentation.defaultFontSize) }
         text.styleProperty().bind(Bindings.concat("-fx-font-size: ", presentation.fontSizeProperty.asString(), "px;")) // https://stackoverflow.com/a/23832850/3453226
         return text
     }
