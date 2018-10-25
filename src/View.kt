@@ -121,14 +121,13 @@ class App : Application() {
 
         val textContent = StringBuilder()
         var totalNetWorth = 0.0
-        val localCurrencyFormatter = fetcherResult.localCurrency.formatter
         for (currency in fetcherResult.currencies) {
-            textContent.append(currency.toString(localCurrencyFormatter))
+            textContent.append(currency.toString(fetcherResult.localPriceFormatter))
             textContent.append(System.lineSeparator())
             totalNetWorth += currency.netWorth
         }
         textContent.append("Total Net Worth: ")
-        textContent.append(localCurrencyFormatter.format(totalNetWorth))
+        textContent.append(fetcherResult.localPriceFormatter.format(totalNetWorth))
 
         val text = Text(textContent.toString())
         javaClass.getResourceAsStream("SourceSansPro/SourceSansPro-Light.otf").use { text.font = Font.loadFont(it, presentation.defaultFontSize) }

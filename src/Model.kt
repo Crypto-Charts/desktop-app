@@ -1,9 +1,7 @@
 package it.menzani.cryptocharts
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.treeToValue
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 import org.stellar.sdk.Server
@@ -13,6 +11,7 @@ import java.text.DecimalFormat
 import java.text.NumberFormat
 import java.util.*
 import java.util.concurrent.Callable
+import java.util.stream.Collectors
 
 data class Setup(
         val localCurrency: LocalCurrency,
@@ -23,7 +22,7 @@ data class LocalCurrency(
         val id: String,
         val languageTag: String
 ) {
-    val formatter = CurrencyFormatter(Locale.forLanguageTag(languageTag))
+    val priceFormatter = CurrencyFormatter(Locale.forLanguageTag(languageTag))
 }
 
 data class CurrencyOwned(
@@ -39,18 +38,13 @@ data class CurrencyOwned(
     fun stellarAccount(): AccountResponse = horizon.accounts().account(KeyPair.fromAccountId(stellarAccountId!!))
 }
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-data class Currency(
-        val symbol: String,
-        val price_usd: String
-) {
-    private val priceFormatter = CurrencyFormatter(Locale.US)
-    var netWorth = 0.0
+class Currency(private val symbol: String, private val globalPrice: Double, val netWorth: Double) {
+    private val globalPriceFormatter = CurrencyFormatter(Locale.US)
 
-    fun toString(formatter: CurrencyFormatter): String {
-        val price_usd = priceFormatter.format(price_usd.toDouble())
-        val netWorth = formatter.format(netWorth)
-        return "$symbol/USD: $price_usd — $symbol Net Worth: $netWorth"
+    fun toString(localPriceFormatter: CurrencyFormatter): String {
+        val globalPrice = globalPriceFormatter.format(globalPrice)
+        val netWorth = localPriceFormatter.format(netWorth)
+        return "$symbol/USD: $globalPrice — $symbol Net Worth: $netWorth"
     }
 }
 
@@ -77,11 +71,16 @@ class Fetcher(private val suppressed: Exception?, private val setup: Setup?, pri
     override fun call(): Result {
         if (suppressed != null) throw suppressed
 
+        val fromSymbols = Arrays.stream(setup!!.currenciesOwned)
+                .map { it.id }
+                .collect(Collectors.joining(","))
+        val toSymbols = "USD," + setup.localCurrency.id
+        val data = fetch(fromSymbols, toSymbols)
+
         val currencies: MutableList<Currency> = mutableListOf()
-        for (currencyOwned in setup!!.currenciesOwned) {
-            val tree = fetch(currencyOwned.id, setup.localCurrency.id.toUpperCase())
-            val currency: Currency = mapper.treeToValue(tree)
-            val amount = if (currencyOwned.id == "stellar" && currencyOwned.stellarAccountId != null) {
+        for (currencyOwned in setup.currenciesOwned) {
+            val currencyData = data[currencyOwned.id]
+            val amount = if (currencyOwned.id == "XLM" && currencyOwned.stellarAccountId != null) {
                 Arrays.stream(currencyOwned.stellarAccount().balances)
                         .filter { it.assetType == "native" }
                         .findFirst().get()
@@ -89,21 +88,21 @@ class Fetcher(private val suppressed: Exception?, private val setup: Setup?, pri
             } else {
                 currencyOwned.amount
             }
-            val price = tree["price_${setup.localCurrency.id.toLowerCase()}"].asDouble()
-            currency.netWorth = amount * price
+            val localPrice = currencyData[setup.localCurrency.id].asDouble()
+            val currency = Currency(currencyOwned.id, currencyData["USD"].asDouble(), amount * localPrice)
             currencies.add(currency)
         }
-        return Result(currencies, setup.localCurrency)
+        return Result(currencies, setup.localCurrency.priceFormatter)
     }
 
-    private fun fetch(currencyId: String, localCurrencyId: String): JsonNode {
+    private fun fetch(fromSymbols: String, toSymbols: String): JsonNode {
         val response: JsonNode = mapper.readTree(URL(
-                "https://api.coinmarketcap.com/v1/ticker/$currencyId/?convert=$localCurrencyId"))
-        if (response.isArray && response.size() == 1) {
-            return response[0]
+                "https://min-api.cryptocompare.com/data/pricemulti?fsyms=$fromSymbols&tsyms=$toSymbols"))
+        if (response.isObject) {
+            return response
         }
         throw Exception("Unexpected response: $response")
     }
 
-    class Result(val currencies: List<Currency>, val localCurrency: LocalCurrency)
+    class Result(val currencies: List<Currency>, val localPriceFormatter: CurrencyFormatter)
 }
