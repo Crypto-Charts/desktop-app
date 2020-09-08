@@ -2,8 +2,6 @@ package it.menzani.cryptocharts
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.stellar.sdk.KeyPair
-import org.stellar.sdk.Network
 import org.stellar.sdk.Server
 import org.stellar.sdk.responses.AccountResponse
 import java.net.URL
@@ -31,11 +29,10 @@ data class CurrencyOwned(
         val stellarAccountId: String?
 ) {
     private val horizon by lazy {
-        Network.usePublicNetwork()
         Server("https://horizon.stellar.org")
     }
 
-    fun stellarAccount(): AccountResponse = horizon.accounts().account(KeyPair.fromAccountId(stellarAccountId!!))
+    fun stellarAccount(): AccountResponse = horizon.accounts().account(stellarAccountId!!)
 }
 
 class Currency(private val symbol: String, private val globalPrice: Double, val netWorth: Double) {
